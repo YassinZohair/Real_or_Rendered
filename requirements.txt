@@ -1,0 +1,14 @@
+torch
+torchvision
+numpy
+pandas
+pyarrow
+scikit-learn
+scikit-image
+scipy
+opencv-python-headless
+huggingface_hub
+tqdm
+ftfy
+regex
+gdown
