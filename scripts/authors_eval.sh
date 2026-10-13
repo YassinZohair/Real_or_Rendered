@@ -5,7 +5,11 @@ set -e
 cd /content/UniversalFakeDetect
 
 if [ ! -d diffusion_datasets ]; then
-    gdown 1FXlGIRh_Ud3cScMgSVDbEWmPDmjcrm1t -O diffusion_datasets.zip
+    # Google Drive tends to drop this 918 MB download midway, so resume until it completes.
+    for attempt in $(seq 1 30); do
+        gdown --continue 1FXlGIRh_Ud3cScMgSVDbEWmPDmjcrm1t -O diffusion_datasets.zip && break
+        sleep 5
+    done
     unzip -q diffusion_datasets.zip
 fi
 
