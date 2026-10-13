@@ -8,7 +8,6 @@ import pandas as pd
 from sklearn.metrics import auc, roc_curve
 
 from ror.config import GENERATORS, RESULTS
-from ror.features import feature_path
 
 FIGURES = RESULTS / "figures"
 
@@ -66,13 +65,13 @@ def accuracy_columns(series, title, path):
         for xi, value in zip(x, mean):
             ax.text(xi, value + 1.5, f"{value:.0f}", ha="center", va="bottom", fontsize=9, color=MUTED)
     ax.axhline(50, color=AXIS, linewidth=1)
-    ax.text(len(order) - 0.45, 51, "chance", ha="right", va="bottom", fontsize=9, color=MUTED)
+    ax.text(1.0, 50, " chance", transform=ax.get_yaxis_transform(), va="center", fontsize=9, color=MUTED)
     ax.set_xticks(np.arange(len(order)), [NAMES[g] for g in order])
     ax.set_ylim(0, 108)
     ax.set_yticks([0, 25, 50, 75, 100])
     ax.set_ylabel("Accuracy (%)")
-    ax.set_title(title, loc="left", fontsize=13, pad=14)
-    ax.legend(frameon=False, loc="upper right", ncols=len(series), bbox_to_anchor=(1, 1.1))
+    ax.set_title(title, loc="left", fontsize=13, pad=34)
+    ax.legend(frameon=False, loc="lower left", ncols=len(series), bbox_to_anchor=(0, 1.0), borderaxespad=0)
     fig.tight_layout()
     fig.savefig(path, dpi=200)
     plt.close(fig)
@@ -82,8 +81,7 @@ def roc_small_multiples(probs, title, path):
     """One ROC panel per test generator."""
     fig, axes = plt.subplots(2, 4, figsize=(11, 5.8), sharex=True, sharey=True)
     for ax, generator in zip(axes.flat, NAMES):
-        labels = np.load(feature_path("test", generator))["label"]
-        fpr, tpr, _ = roc_curve(labels, probs[f"{generator}/resize"])
+        fpr, tpr, _ = roc_curve(probs[f"{generator}/label"], probs[f"{generator}/resize"])
         ax.plot([0, 1], [0, 1], color=AXIS, linewidth=1)
         ax.plot(fpr, tpr, color=ORANGE, linewidth=2)
         ax.set_title(NAMES[generator].replace("\n", " "), fontsize=11, loc="left")
@@ -95,7 +93,7 @@ def roc_small_multiples(probs, title, path):
     fig.supxlabel("False positive rate (real images called AI)", fontsize=11, color=MUTED)
     fig.supylabel("True positive rate (AI images caught)", fontsize=11, color=MUTED)
     fig.suptitle(title, x=0.02, ha="left", fontsize=13)
-    fig.tight_layout()
+    fig.tight_layout(h_pad=2)
     fig.savefig(path, dpi=200)
     plt.close(fig)
 

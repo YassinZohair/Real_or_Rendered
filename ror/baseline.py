@@ -39,10 +39,11 @@ def released_head():
 
 
 def evaluate(head, model_name, seed):
-    """One row per (test generator, protocol), plus the per-image probabilities."""
+    """One row per (test generator, protocol), plus the per-image probabilities and labels."""
     rows, probs = [], {}
     for generator in GENERATORS:
         cached = np.load(feature_path("test", generator))
+        probs[f"{generator}/label"] = cached["label"]
         for protocol in TEST_VIEWS:
             p = predict(head, cached[protocol])
             probs[f"{generator}/{protocol}"] = p
