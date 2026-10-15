@@ -1,5 +1,7 @@
 """Run images through the frozen CLIP encoder once and cache the features."""
 import os
+import sys
+from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -16,11 +18,31 @@ from ror.config import (
     TEST_PER_CLASS,
     TRAIN_GENERATOR,
 )
-from ror.views import VIEWS
+from ror.views import DEGRADED_TEST_VIEWS, VIEWS
 
-AUG_VIEWS_PER_IMAGE = 4
-TRAIN_VIEWS = {"aug": AUG_VIEWS_PER_IMAGE, "resize": 1}
-TEST_VIEWS = {"resize": 1, "crop": 1}
+# Feature files are named <split>_<generator><tag>.npz.
+CLEAN_TAG, U2_TAG, DEGRADED_TAG = "", "_u2", "_degraded"
+
+
+@dataclass
+class Job:
+    split: str
+    generators: list
+    views: dict  # view name -> copies per image
+    per_class: int | None  # None keeps every image
+    tag: str
+
+
+JOBS = {
+    "baseline": [
+        Job("train", [TRAIN_GENERATOR], {"aug": 4, "resize": 1}, None, CLEAN_TAG),
+        Job("test", GENERATORS, {"resize": 1, "crop": 1}, TEST_PER_CLASS, CLEAN_TAG),
+    ],
+    "u2": [
+        Job("train", [TRAIN_GENERATOR], {"u2_aug": 4, "jpeg95": 1}, None, U2_TAG),
+        Job("test", GENERATORS, {view: 1 for view in DEGRADED_TEST_VIEWS}, TEST_PER_CLASS, DEGRADED_TAG),
+    ],
+}
 
 
 def load_univfd():
@@ -32,8 +54,8 @@ def load_univfd():
     return model.eval().cuda()
 
 
-def feature_path(split, generator):
-    return FEATURES / f"{split}_{generator}.npz"
+def feature_path(split, generator, tag=CLEAN_TAG):
+    return FEATURES / f"{split}_{generator}{tag}.npz"
 
 
 @torch.no_grad()
@@ -58,15 +80,15 @@ def extract(model, dataset_args, view_counts, batch_size=64):
     return out
 
 
-def cache(model, split, generator, view_counts, per_class=None):
-    path = feature_path(split, generator)
+def cache(model, job, generator):
+    path = feature_path(job.split, generator, job.tag)
     if path.exists():
         print(f"{path.name}: cached, skipping")
         return
-    labels, image_paths = data.read_index(split, generator)
-    rows = np.arange(len(labels)) if per_class is None else data.balanced_sample(labels, per_class)
+    labels, image_paths = data.read_index(job.split, generator)
+    rows = np.arange(len(labels)) if job.per_class is None else data.balanced_sample(labels, job.per_class)
     print(f"{path.name}: {len(rows)} images")
-    feats = extract(model, (split, generator, rows), view_counts)
+    feats = extract(model, (job.split, generator, rows), job.views)
 
     # Written to a temp name first so an interrupted session never leaves a half file on Drive.
     tmp = path.with_suffix(".tmp.npz")
@@ -74,14 +96,14 @@ def cache(model, split, generator, view_counts, per_class=None):
     tmp.replace(path)
 
 
-def main():
+def main(experiment):
     FEATURES.mkdir(parents=True, exist_ok=True)
     torch.manual_seed(SAMPLE_SEED)
     model = load_univfd()
-    cache(model, "train", TRAIN_GENERATOR, TRAIN_VIEWS)
-    for generator in GENERATORS:
-        cache(model, "test", generator, TEST_VIEWS, per_class=TEST_PER_CLASS)
+    for job in JOBS[experiment]:
+        for generator in job.generators:
+            cache(model, job, generator)
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1] if len(sys.argv) > 1 else "baseline")

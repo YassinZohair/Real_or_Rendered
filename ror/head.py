@@ -20,6 +20,12 @@ def new_head():
     return nn.Linear(FEATURE_DIM, 1)
 
 
+def load_head(path):
+    head = new_head()
+    head.load_state_dict(torch.load(path, map_location="cpu"))
+    return head.cuda()
+
+
 @torch.no_grad()
 def predict(head, x):
     """Probability that each image is AI-generated."""

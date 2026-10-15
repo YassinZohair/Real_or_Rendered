@@ -4,7 +4,8 @@ from types import SimpleNamespace
 
 from torchvision import transforms
 
-from ror.config import UNIVFD
+from ror import degrade
+from ror.config import EQUAL_FORMAT_QUALITY, JPEG_QUALITIES, SHARED_QUALITY, SHARED_SCALE, UNIVFD
 
 sys.path.insert(0, str(UNIVFD))
 from data.datasets import MEAN, STD, custom_resize, data_augment  # noqa: E402
@@ -37,3 +38,29 @@ VIEWS = {
     # The repo's validate.py protocol: no resize, so each generator is seen at its native scale.
     "crop": transforms.Compose([transforms.CenterCrop(CROP), _to_tensor]),
 }
+
+
+def _damaged_then_resized(damage):
+    """Damage the image at its original size, as happens online, then apply the main test protocol."""
+    return transforms.Compose([transforms.Lambda(damage), _resize, transforms.CenterCrop(CROP), _to_tensor])
+
+
+# U2 training: equal file format first, then real-world damage, then the repo's crop and flip.
+VIEWS["u2_aug"] = transforms.Compose(
+    [
+        transforms.Lambda(lambda img: degrade.jpeg(img, EQUAL_FORMAT_QUALITY)),
+        transforms.Lambda(degrade.real_world),
+        _resize,
+        transforms.RandomCrop(CROP),
+        transforms.RandomHorizontalFlip(),
+        _to_tensor,
+    ]
+)
+for _quality in JPEG_QUALITIES:
+    VIEWS[f"jpeg{_quality}"] = _damaged_then_resized(lambda img, q=_quality: degrade.jpeg(img, q))
+VIEWS["shared"] = _damaged_then_resized(
+    lambda img: degrade.jpeg(degrade.shrink(img, SHARED_SCALE), SHARED_QUALITY)
+)
+
+# jpeg95 doubles as the equal-format test: every real and fake image saved the same way.
+DEGRADED_TEST_VIEWS = [f"jpeg{q}" for q in JPEG_QUALITIES] + ["shared"]

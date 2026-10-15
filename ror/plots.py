@@ -1,4 +1,6 @@
 """Figures for the baseline results."""
+import sys
+
 import matplotlib
 
 matplotlib.use("Agg")
@@ -7,7 +9,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import auc, roc_curve
 
-from ror.config import GENERATORS, RESULTS
+from ror.config import JPEG_QUALITIES, RESULTS, SHARED_QUALITY
 
 FIGURES = RESULTS / "figures"
 
@@ -21,9 +23,15 @@ NAMES = {
     "VQDM": "VQDM",
     "BigGAN": "BigGAN",
 }
-BLUE, ORANGE, AQUA = "#2a78d6", "#eb6834", "#1baf7a"
+BLUE, ORANGE, AQUA, VIOLET = "#2a78d6", "#eb6834", "#1baf7a", "#4a3aa7"
 SURFACE, TEXT, MUTED, GRID, AXIS = "#fcfcfb", "#0b0b0b", "#52514e", "#e1e0d9", "#c3c2b7"
 BAR_WIDTH = 0.36
+# Test conditions from mildest to harshest, as (results protocol, axis label).
+CONDITIONS = (
+    [("resize", "Clean")]
+    + [(f"jpeg{q}", f"JPEG {q}") for q in JPEG_QUALITIES]
+    + [("shared", f"Shared\n(half size,\nJPEG {SHARED_QUALITY})")]
+)
 
 plt.rcParams.update(
     {
@@ -98,14 +106,48 @@ def roc_small_multiples(probs, title, path):
     plt.close(fig)
 
 
-def main():
-    FIGURES.mkdir(parents=True, exist_ok=True)
-    results = pd.read_csv(RESULTS / "baseline.csv")
-    assert set(results["generator"]) == set(GENERATORS)
+def robustness_curve(series, title, path):
+    """Mean accuracy over the 8 generators as test images get more damaged. series: {label: (color, frame)}."""
+    protocols, labels = zip(*CONDITIONS)
+    x = np.arange(len(protocols))
+    fig, ax = plt.subplots(figsize=(11, 4.6))
+    means = {}
+    for label, (color, frame) in series.items():
+        per_seed = frame.groupby(["protocol", "seed"])["acc"].mean().unstack("seed").loc[list(protocols)]
+        mean, std = per_seed.mean(axis=1).to_numpy(), per_seed.std(axis=1).fillna(0).to_numpy()
+        means[label] = mean
+        ax.fill_between(x, mean - std, mean + std, color=color, alpha=0.1, linewidth=0)
+        ax.plot(x, mean, color=color, linewidth=2, marker="o", markersize=8,
+                markeredgecolor=SURFACE, markeredgewidth=2, label=label)
+    # End values only; each label goes above its point if its line is the higher one there, else below.
+    for mean in means.values():
+        for i in (0, len(x) - 1):
+            above = mean[i] >= max(other[i] for other in means.values())
+            ax.annotate(f"{mean[i]:.1f}", (x[i], mean[i]), textcoords="offset points",
+                        xytext=(0, 9 if above else -10), ha="center", va="bottom" if above else "top",
+                        fontsize=9, color=MUTED)
+    ax.axhline(50, color=AXIS, linewidth=1)
+    ax.text(1.0, 50, " chance", transform=ax.get_yaxis_transform(), va="center", fontsize=9, color=MUTED)
+    ax.set_xticks(x, labels)
+    ax.set_ylim(40, 100)
+    ax.set_ylabel("Mean accuracy over 8 generators (%)")
+    ax.set_title(title, loc="left", fontsize=13, pad=34)
+    ax.legend(frameon=False, loc="lower left", ncols=len(series), bbox_to_anchor=(0, 1.0), borderaxespad=0)
+    fig.tight_layout()
+    fig.savefig(path, dpi=200)
+    plt.close(fig)
 
-    def pick(model, protocol):
-        return results[(results["model"] == model) & (results["protocol"] == protocol)]
 
+def _picker(results):
+    def pick(model, protocol=None):
+        rows = results[results["model"] == model]
+        return rows if protocol is None else rows[rows["protocol"] == protocol]
+
+    return pick
+
+
+def baseline_figures():
+    pick = _picker(pd.read_csv(RESULTS / "baseline.csv"))
     accuracy_columns(
         {
             "Released weights (trained on ProGAN)": (BLUE, pick("released_progan", "resize")),
@@ -123,12 +165,36 @@ def main():
         FIGURES / "baseline_resize_vs_crop.png",
     )
     roc_small_multiples(
-        np.load(RESULTS / "probs_retrained_sd14_seed0.npz"),
+        np.load(RESULTS / "probs_baseline_retrained_sd14_seed0.npz"),
         "ROC curves of our baseline (seed 0) on each GenImage generator",
         FIGURES / "baseline_roc.png",
     )
+
+
+def u2_figures():
+    pick = _picker(pd.read_csv(RESULTS / "u2.csv"))
+    baseline, u2 = "Baseline", "U2 (equal format + real-world damage)"
+    robustness_curve(
+        {baseline: (ORANGE, pick("retrained_sd14")), u2: (VIOLET, pick("u2"))},
+        "Accuracy as test images are compressed and shared",
+        FIGURES / "u2_robustness.png",
+    )
+    for protocol, name, title in [
+        ("resize", "u2_clean", "Clean test images: does U2 cost accuracy?"),
+        ("shared", "u2_shared", f"Shared test images (half size, JPEG {SHARED_QUALITY})"),
+    ]:
+        accuracy_columns(
+            {baseline: (ORANGE, pick("retrained_sd14", protocol)), u2: (VIOLET, pick("u2", protocol))},
+            title,
+            FIGURES / f"{name}.png",
+        )
+
+
+def main(experiment):
+    FIGURES.mkdir(parents=True, exist_ok=True)
+    {"baseline": baseline_figures, "u2": u2_figures}[experiment]()
     print(f"figures written to {FIGURES}")
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1] if len(sys.argv) > 1 else "baseline")

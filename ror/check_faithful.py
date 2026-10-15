@@ -3,10 +3,9 @@ import numpy as np
 import torch
 
 from ror import data
-from ror.baseline import released_head
-from ror.config import TRAIN_GENERATOR
+from ror.config import RELEASED_FC, TRAIN_GENERATOR
 from ror.features import feature_path, load_univfd
-from ror.head import predict
+from ror.head import load_head, predict
 from ror.views import VIEWS
 
 N_IMAGES = 200
@@ -23,7 +22,7 @@ def main():
     model = load_univfd()
     end_to_end = torch.cat([torch.sigmoid(model(b)).squeeze(1) for b in images.split(50)]).cpu().numpy()
 
-    from_cache = predict(released_head(), cached["crop"][pick])
+    from_cache = predict(load_head(RELEASED_FC), cached["crop"][pick])
 
     print(f"max |probability difference| over {N_IMAGES} images: {np.abs(end_to_end - from_cache).max():.5f}")
     print(f"same decision at 0.5: {((end_to_end > 0.5) == (from_cache > 0.5)).mean() * 100:.1f}%")
