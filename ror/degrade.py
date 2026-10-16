@@ -23,6 +23,12 @@ def rescale(img, factor):
     return shrink(img, factor).resize(img.size, Image.BICUBIC)
 
 
+def downsize(img, short_side):
+    """Shrink so the shorter side is at most short_side, as sharing apps do. Never enlarges."""
+    factor = short_side / min(img.size)
+    return shrink(img, factor) if factor < 1 else img
+
+
 def blur(img, sigma):
     return img.filter(ImageFilter.GaussianBlur(sigma))
 
@@ -51,9 +57,15 @@ def rephotograph(img):
     return noise(img, random.uniform(2, 6))
 
 
-def share_once(img):
-    """One trip through a sharing app: possibly downsized, filtered or noisy, usually recompressed."""
-    if random.random() < 0.4:
+def share_once(img, platform_downsize):
+    """One trip through a sharing app: possibly downsized, filtered or noisy, usually recompressed.
+
+    With platform_downsize the image can stay small, so JPEG damage lands at the scale the
+    detector sees. Without it (U2's first version) every shrink is undone before compression.
+    """
+    if platform_downsize and random.random() < 0.4:
+        img = downsize(img, random.randint(128, 384))
+    elif random.random() < 0.4:
         img = rescale(img, random.uniform(0.25, 0.9))
     if random.random() < 0.3:
         img = blur(img, random.uniform(0.1, 2.0))
@@ -66,12 +78,12 @@ def share_once(img):
     return img
 
 
-def real_world(img):
+def real_world(img, platform_downsize):
     """U2's training damage. A fifth of images stay untouched so the head still sees clean ones."""
     if random.random() < 0.2:
         return img
     if random.random() < 0.1:
         img = rephotograph(img)
     for _ in range(random.randint(1, 3)):
-        img = share_once(img)
+        img = share_once(img, platform_downsize)
     return img

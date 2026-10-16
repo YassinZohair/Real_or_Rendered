@@ -21,7 +21,7 @@ from ror.config import (
 from ror.views import DEGRADED_TEST_VIEWS, VIEWS
 
 # Feature files are named <split>_<generator><tag>.npz.
-CLEAN_TAG, U2_TAG, DEGRADED_TAG = "", "_u2", "_degraded"
+CLEAN_TAG, U2_TAG, U2V2_TAG, DEGRADED_TAG = "", "_u2", "_u2v2", "_degraded"
 
 
 @dataclass
@@ -40,6 +40,7 @@ JOBS = {
     ],
     "u2": [
         Job("train", [TRAIN_GENERATOR], {"u2_aug": 4, "jpeg95": 1}, None, U2_TAG),
+        Job("train", [TRAIN_GENERATOR], {"u2v2_aug": 4, "jpeg95": 1}, None, U2V2_TAG),
         Job("test", GENERATORS, {view: 1 for view in DEGRADED_TEST_VIEWS}, TEST_PER_CLASS, DEGRADED_TAG),
     ],
 }

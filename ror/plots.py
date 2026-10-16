@@ -23,7 +23,7 @@ NAMES = {
     "VQDM": "VQDM",
     "BigGAN": "BigGAN",
 }
-BLUE, ORANGE, AQUA, VIOLET = "#2a78d6", "#eb6834", "#1baf7a", "#4a3aa7"
+BLUE, ORANGE, AQUA, VIOLET, GREEN = "#2a78d6", "#eb6834", "#1baf7a", "#4a3aa7", "#008300"
 SURFACE, TEXT, MUTED, GRID, AXIS = "#fcfcfb", "#0b0b0b", "#52514e", "#e1e0d9", "#c3c2b7"
 BAR_WIDTH = 0.36
 # Test conditions from mildest to harshest, as (results protocol, axis label).
@@ -63,15 +63,16 @@ def accuracy_columns(series, title, path):
     """Grouped columns of accuracy per test generator. series: {label: (color, per-seed frame)}."""
     order = list(NAMES)
     fig, ax = plt.subplots(figsize=(11, 4.6))
-    offsets = (np.arange(len(series)) - (len(series) - 1) / 2) * (BAR_WIDTH + 0.03)
+    width = min(BAR_WIDTH, 0.84 / len(series) - 0.03)
+    offsets = (np.arange(len(series)) - (len(series) - 1) / 2) * (width + 0.03)
     for offset, (label, (color, frame)) in zip(offsets, series.items()):
         per_seed = frame.pivot(index="generator", columns="seed", values="acc").loc[order]
         mean, std = per_seed.mean(axis=1), per_seed.std(axis=1).fillna(0)
         x = np.arange(len(order)) + offset
-        ax.bar(x, mean, BAR_WIDTH, color=color, label=label, yerr=std if std.any() else None,
+        ax.bar(x, mean, width, color=color, label=label, yerr=std if std.any() else None,
                error_kw={"ecolor": TEXT, "elinewidth": 1, "capsize": 2})
         for xi, value in zip(x, mean):
-            ax.text(xi, value + 1.5, f"{value:.0f}", ha="center", va="bottom", fontsize=9, color=MUTED)
+            ax.text(xi, value + 1.5, f"{value:.0f}", ha="center", va="bottom", fontsize=10 - len(series), color=MUTED)
     ax.axhline(50, color=AXIS, linewidth=1)
     ax.text(1.0, 50, " chance", transform=ax.get_yaxis_transform(), va="center", fontsize=9, color=MUTED)
     ax.set_xticks(np.arange(len(order)), [NAMES[g] for g in order])
@@ -119,13 +120,13 @@ def robustness_curve(series, title, path):
         ax.fill_between(x, mean - std, mean + std, color=color, alpha=0.1, linewidth=0)
         ax.plot(x, mean, color=color, linewidth=2, marker="o", markersize=8,
                 markeredgecolor=SURFACE, markeredgewidth=2, label=label)
-    # End values only; each label goes above its point if its line is the higher one there, else below.
-    for mean in means.values():
-        for i in (0, len(x) - 1):
-            above = mean[i] >= max(other[i] for other in means.values())
-            ax.annotate(f"{mean[i]:.1f}", (x[i], mean[i]), textcoords="offset points",
-                        xytext=(0, 9 if above else -10), ha="center", va="bottom" if above else "top",
-                        fontsize=9, color=MUTED)
+    # End values only: the highest line's label sits above its point, the others stack below theirs.
+    for i in (0, len(x) - 1):
+        ranked = sorted(means.values(), key=lambda mean: mean[i], reverse=True)
+        for rank, mean in enumerate(ranked):
+            offset = 9 if rank == 0 else -10 - 12 * (rank - 1)
+            ax.annotate(f"{mean[i]:.1f}", (x[i], mean[i]), textcoords="offset points", xytext=(0, offset),
+                        ha="center", va="bottom" if rank == 0 else "top", fontsize=9, color=MUTED)
     ax.axhline(50, color=AXIS, linewidth=1)
     ax.text(1.0, 50, " chance", transform=ax.get_yaxis_transform(), va="center", fontsize=9, color=MUTED)
     ax.set_xticks(x, labels)
@@ -173,9 +174,13 @@ def baseline_figures():
 
 def u2_figures():
     pick = _picker(pd.read_csv(RESULTS / "u2.csv"))
-    baseline, u2 = "Baseline", "U2 (equal format + real-world damage)"
+    models = {
+        "Baseline": (ORANGE, "retrained_sd14"),
+        "U2, first version": (VIOLET, "u2"),
+        "U2 with platform downsizing": (GREEN, "u2v2"),
+    }
     robustness_curve(
-        {baseline: (ORANGE, pick("retrained_sd14")), u2: (VIOLET, pick("u2"))},
+        {label: (color, pick(model)) for label, (color, model) in models.items()},
         "Accuracy as test images are compressed and shared",
         FIGURES / "u2_robustness.png",
     )
@@ -184,7 +189,7 @@ def u2_figures():
         ("shared", "u2_shared", f"Shared test images (half size, JPEG {SHARED_QUALITY})"),
     ]:
         accuracy_columns(
-            {baseline: (ORANGE, pick("retrained_sd14", protocol)), u2: (VIOLET, pick("u2", protocol))},
+            {label: (color, pick(model, protocol)) for label, (color, model) in models.items()},
             title,
             FIGURES / f"{name}.png",
         )

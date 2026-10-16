@@ -45,17 +45,22 @@ def _damaged_then_resized(damage):
     return transforms.Compose([transforms.Lambda(damage), _resize, transforms.CenterCrop(CROP), _to_tensor])
 
 
-# U2 training: equal file format first, then real-world damage, then the repo's crop and flip.
-VIEWS["u2_aug"] = transforms.Compose(
-    [
-        transforms.Lambda(lambda img: degrade.jpeg(img, EQUAL_FORMAT_QUALITY)),
-        transforms.Lambda(degrade.real_world),
-        _resize,
-        transforms.RandomCrop(CROP),
-        transforms.RandomHorizontalFlip(),
-        _to_tensor,
-    ]
-)
+def _u2_training(platform_downsize):
+    """U2 training: equal file format first, then real-world damage, then the repo's crop and flip."""
+    return transforms.Compose(
+        [
+            transforms.Lambda(lambda img: degrade.jpeg(img, EQUAL_FORMAT_QUALITY)),
+            transforms.Lambda(lambda img: degrade.real_world(img, platform_downsize)),
+            _resize,
+            transforms.RandomCrop(CROP),
+            transforms.RandomHorizontalFlip(),
+            _to_tensor,
+        ]
+    )
+
+
+VIEWS["u2_aug"] = _u2_training(platform_downsize=False)
+VIEWS["u2v2_aug"] = _u2_training(platform_downsize=True)
 for _quality in JPEG_QUALITIES:
     VIEWS[f"jpeg{_quality}"] = _damaged_then_resized(lambda img, q=_quality: degrade.jpeg(img, q))
 VIEWS["shared"] = _damaged_then_resized(
