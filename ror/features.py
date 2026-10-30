@@ -1,5 +1,4 @@
 """Run images through the frozen CLIP encoder once and cache the features."""
-import os
 import sys
 from dataclasses import dataclass
 
@@ -17,10 +16,12 @@ from ror.config import (
     SAMPLE_SEED,
     TEST_PER_CLASS,
     TRAIN_GENERATOR,
+    TRAIN_TAG,
 )
+from ror.device import DEVICE, NUM_WORKERS, autocast
 from ror.views import DEGRADED_TEST_VIEWS, VIEWS
 
-# Feature files are named <split>_<generator><tag>.npz.
+# Feature files are named <split>_<generator><tag>.npz; training files also carry the training-size tag.
 CLEAN_TAG, U2_TAG, U2V2_TAG, DEGRADED_TAG = "", "_u2", "_u2v2", "_degraded"
 
 
@@ -52,11 +53,12 @@ def load_univfd():
 
     model = get_model(CLIP_ARCH)
     model.fc.load_state_dict(torch.load(RELEASED_FC, map_location="cpu"))
-    return model.eval().cuda()
+    return model.eval().to(DEVICE)
 
 
 def feature_path(split, generator, tag=CLEAN_TAG):
-    return FEATURES / f"{split}_{generator}{tag}.npz"
+    size_tag = TRAIN_TAG if split == "train" else ""
+    return FEATURES / f"{split}_{generator}{size_tag}{tag}.npz"
 
 
 @torch.no_grad()
@@ -64,12 +66,12 @@ def extract(model, dataset_args, view_counts, batch_size=64):
     """Returns {view: [n, 768]} for single views and {view: [n, count, 768]} for repeated ones."""
     names = [name for name, count in view_counts.items() for _ in range(count)]
     dataset = data.ViewDataset(*dataset_args, views=[VIEWS[name] for name in names])
-    loader = DataLoader(dataset, batch_size=batch_size, num_workers=os.cpu_count())
+    loader = DataLoader(dataset, batch_size=batch_size, num_workers=NUM_WORKERS)
     chunks = []
     for x in tqdm(loader):
         n, v = x.shape[:2]
-        with torch.autocast("cuda", dtype=torch.float16):
-            feats = model.model.encode_image(x.flatten(0, 1).cuda())
+        with autocast():
+            feats = model.model.encode_image(x.flatten(0, 1).to(DEVICE))
         chunks.append(feats.float().view(n, v, -1).cpu())
     feats = torch.cat(chunks).numpy()
 

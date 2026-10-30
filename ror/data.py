@@ -29,6 +29,10 @@ def download():
 def shard_paths(split, generator):
     paths = sorted((DATA / "data" / split / generator).glob("*.arrow"))
     assert paths, f"no shards for {split}/{generator}; run python -m ror.data first"
+    if split == "train":
+        # Only the first N_TRAIN_SHARDS, even if more were downloaded, so the images always match the cache.
+        assert len(paths) >= N_TRAIN_SHARDS, f"{len(paths)} training shards on disk, {N_TRAIN_SHARDS} needed"
+        paths = paths[:N_TRAIN_SHARDS]
     return paths
 
 

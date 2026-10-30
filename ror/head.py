@@ -5,6 +5,7 @@ import torch
 from torch import nn
 
 from ror.config import FEATURE_DIM
+from ror.device import DEVICE
 
 # The repo's training settings (networks/trainer.py, options/train_options.py, train.py).
 LR = 1e-4
@@ -23,7 +24,7 @@ def new_head():
 def load_head(path):
     head = new_head()
     head.load_state_dict(torch.load(path, map_location="cpu"))
-    return head.cuda()
+    return head.to(DEVICE)
 
 
 @torch.no_grad()
@@ -40,9 +41,9 @@ def accuracy(head, x, y):
 def train_head(train, val, seed):
     """Early stopping on validation accuracy; on a plateau the learning rate drops 10x until MIN_LR."""
     torch.manual_seed(seed)
-    x = torch.as_tensor(train[0]).cuda()
-    y = torch.as_tensor(train[1]).float().cuda()
-    head = new_head().cuda()
+    x = torch.as_tensor(train[0]).to(DEVICE)
+    y = torch.as_tensor(train[1]).float().to(DEVICE)
+    head = new_head().to(DEVICE)
     nn.init.normal_(head.weight, 0.0, INIT_STD)
     optimizer = torch.optim.AdamW(head.parameters(), lr=LR, betas=(0.9, 0.999), weight_decay=0.0)
     loss_fn = nn.BCEWithLogitsLoss()

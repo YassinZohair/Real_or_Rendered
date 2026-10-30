@@ -4,6 +4,7 @@ import torch
 
 from ror import data
 from ror.config import RELEASED_FC, TRAIN_GENERATOR
+from ror.device import DEVICE
 from ror.features import feature_path, load_univfd
 from ror.head import load_head, predict
 from ror.views import VIEWS
@@ -18,7 +19,7 @@ def main():
 
     # validate.py's own preprocessing is the "crop" view, here in full precision.
     dataset = data.ViewDataset("test", TRAIN_GENERATOR, cached["row"][pick], views=[VIEWS["crop"]])
-    images = torch.stack([dataset[i][0] for i in range(N_IMAGES)]).cuda()
+    images = torch.stack([dataset[i][0] for i in range(N_IMAGES)]).to(DEVICE)
     model = load_univfd()
     end_to_end = torch.cat([torch.sigmoid(model(b)).squeeze(1) for b in images.split(50)]).cpu().numpy()
 
