@@ -8,7 +8,7 @@ from huggingface_hub import snapshot_download
 from PIL import Image, ImageFile
 from torch.utils.data import Dataset
 
-from ror.config import DATA, HF_REPO, N_TRAIN_SHARDS, SAMPLE_SEED, TRAIN_GENERATOR
+from ror.config import DATA, HF_REPO, N_TRAIN_SHARDS, SAMPLE_SEED, TEST_PER_CLASS, TRAIN_GENERATOR
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -51,10 +51,15 @@ def read_index(split, generator):
 
 
 def balanced_sample(labels, per_class):
-    """Test shards are sorted real-then-fake, so sample rows at random instead of taking a prefix."""
+    """Test shards are sorted real-then-fake, so sample rows at random instead of taking a prefix.
+
+    A smaller sample is the start of the TEST_PER_CLASS draw, so it is a subset of the full test
+    sample and results on it stay paired, image for image, with results on the full sample.
+    """
+    assert per_class <= TEST_PER_CLASS
     rng = np.random.default_rng(SAMPLE_SEED)
-    rows = [rng.choice(np.flatnonzero(labels == c), per_class, replace=False) for c in (REAL, FAKE)]
-    return np.sort(np.concatenate(rows))
+    draws = [rng.choice(np.flatnonzero(labels == c), TEST_PER_CLASS, replace=False) for c in (REAL, FAKE)]
+    return np.sort(np.concatenate([draw[:per_class] for draw in draws]))
 
 
 class ViewDataset(Dataset):

@@ -9,12 +9,17 @@ from ror.head import predict, train_head
 from ror.metrics import score
 
 
+def train_val_split(n_images):
+    """Positions of the training and validation images. Every model uses this one split."""
+    order = np.random.default_rng(SAMPLE_SEED).permutation(n_images)
+    n_val = int(n_images * VAL_FRACTION)
+    return order[n_val:], order[:n_val]
+
+
 def load_train_val(tag, train_view, val_view):
     """Split by image, so every copy of a validation image stays out of training."""
     cached = np.load(feature_path("train", TRAIN_GENERATOR, tag))
-    order = np.random.default_rng(SAMPLE_SEED).permutation(len(cached["label"]))
-    n_val = int(len(order) * VAL_FRACTION)
-    val_idx, train_idx = order[:n_val], order[n_val:]
+    train_idx, val_idx = train_val_split(len(cached["label"]))
 
     copies = cached[train_view][train_idx]
     train = (copies.reshape(-1, copies.shape[-1]), np.repeat(cached["label"][train_idx], copies.shape[1]))

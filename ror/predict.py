@@ -3,7 +3,8 @@
     python -m ror.predict photo.jpg [more.png ...] [--head PATH] [--view resize|crop]
 
 The full pipeline for one image, with no cache: decode, the test view (resize to 256, centre crop 224,
-CLIP normalisation), frozen CLIP ViT-L/14 -> 768 numbers, a trained linear head -> sigmoid -> P(AI).
+CLIP normalisation), CLIP ViT-L/14 -> 768 numbers, a trained linear head -> sigmoid -> P(AI).
+--head takes a baseline or U2 head (.pth), or a U1 checkpoint (.pt: LoRA adapters plus their head).
 """
 import argparse
 from pathlib import Path
@@ -25,8 +26,14 @@ class Detector:
     """Loads CLIP and one head once, then scores any number of PIL images."""
 
     def __init__(self, head_path=DEFAULT_HEAD, view="resize"):
-        self.clip = load_univfd()
-        self.head = load_head(head_path)
+        if head_path.suffix == ".pt":
+            from ror.u1 import load_u1
+
+            self.clip = load_u1(head_path)
+            self.head = self.clip.fc
+        else:
+            self.clip = load_univfd()
+            self.head = load_head(head_path)
         self.view = VIEWS[view]
 
     @torch.no_grad()
@@ -40,7 +47,7 @@ class Detector:
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("images", nargs="+", type=Path)
-    parser.add_argument("--head", type=Path, default=DEFAULT_HEAD, help="a trained head (.pth)")
+    parser.add_argument("--head", type=Path, default=DEFAULT_HEAD, help="a trained head (.pth) or U1 checkpoint (.pt)")
     parser.add_argument("--view", default="resize", choices=["resize", "crop"], help="test preprocessing")
     args = parser.parse_args()
 
