@@ -6,8 +6,9 @@
     python -m ror.u1 train ... --damaged                 also test on JPEG / shared copies
     python -m ror.u1 report                              mean over generators, U1 runs vs baseline
 
-The head starts from the trained baseline head of the same seed and the adapters start at zero,
-so training starts from exactly the baseline model (linear probe, then fine-tune: Kumar et al. 2022,
+The head starts from the trained linear head of the same seed and data (B's head for U1, U2 v2's head
+for B+U1+U2) and the adapters start at zero, so training starts from exactly that frozen-CLIP model and
+U1 is the only change (linear probe, then fine-tune: Kumar et al. 2022,
 which keeps fine-tuning from distorting the pretrained features as much as a random head would).
 
 Unlike B and U2, gradients flow through all 24 CLIP layers, so features cannot be cached for
@@ -46,8 +47,9 @@ VALIDATIONS_PER_EPOCH = 4
 DAMAGED_PER_CLASS = 1000
 GRADIENT_CHECKPOINTING = os.environ.get("ROR_CHECKPOINTING", "1") == "1"
 
-# variant -> (training view, validation view). The validation view matches how B and U2 were validated.
-VARIANTS = {"u1": ("aug", "resize"), "u1u2": ("u2v2_aug", "jpeg95")}
+# variant -> (training view, validation view, starting head). Views match how B and U2 were trained and
+# validated; the starting head is the frozen-CLIP model trained on the same images (B, or B+U2 v2).
+VARIANTS = {"u1": ("aug", "resize", "retrained_sd14"), "u1u2": ("u2v2_aug", "jpeg95", "u2v2")}
 BASELINE_HEAD = "retrained_sd14"
 
 
@@ -78,8 +80,8 @@ def checkpoint_path(name, seed):
     return CHECKPOINTS / f"{name}_seed{seed}.pt"
 
 
-def baseline_head(seed):
-    return torch.load(CHECKPOINTS / f"{BASELINE_HEAD}_seed{seed}.pth", map_location="cpu")
+def starting_head(variant, seed):
+    return torch.load(CHECKPOINTS / f"{VARIANTS[variant][2]}_seed{seed}.pth", map_location="cpu")
 
 
 def load_u1(path):
@@ -125,7 +127,7 @@ def train(model, variant, name, seed):
     """One epoch of LoRA + head training. Resumes from the last validation if a session dropped."""
     torch.manual_seed(seed)
     random.seed(seed)
-    train_view, val_view = VARIANTS[variant]
+    train_view, val_view, _ = VARIANTS[variant]
     labels, _ = data.read_index("train", TRAIN_GENERATOR)
     train_rows, val_rows = train_val_split(len(labels))
     train_set = Labelled(train_rows, labels, train_view)
@@ -154,9 +156,9 @@ def train(model, variant, name, seed):
         print(f"resuming at step {step} of {total_steps}")
     else:
         step, best = 0, None
-        # Must equal the baseline head's validation accuracy: the adapters are still zero.
+        # Must equal the starting head's validation accuracy: the adapters are still zero.
         log = [{"step": 0, "train_loss": float("nan"), "val_acc": val_accuracy(model, val_loader)}]
-        print(f"step 0 (= baseline): val acc {log[0]['val_acc']:.4f}")
+        print(f"step 0 (= starting model): val acc {log[0]['val_acc']:.4f}")
 
     print(f"{name} seed {seed}: {len(train_set)} images, {total_steps} steps of {BATCH_SIZE}, validating every {val_every}")
     losses = []
@@ -236,7 +238,7 @@ def check(rank=8, n_images=64):
     dataset = data.ViewDataset("test", TRAIN_GENERATOR, cached["row"][pick], views=[VIEWS["resize"]])
     images = torch.stack([dataset[i][0] for i in range(n_images)]).to(DEVICE)
 
-    model = build(rank, baseline_head(0)).eval()
+    model = build(rank, starting_head("u1", 0)).eval()
     with autocast():
         feats = torch.cat([model.model.encode_image(b) for b in images.split(16)]).float()
     diff = np.abs(feats.cpu().numpy() - cached["resize"][pick]).max()
@@ -290,7 +292,7 @@ def main():
         if checkpoint_path(name, args.seed).exists():  # trained already: only the missing evaluations run
             model = load_u1(checkpoint_path(name, args.seed))
         else:
-            model = train(build(args.rank, baseline_head(args.seed)), variant, name, args.seed)
+            model = train(build(args.rank, starting_head(variant, args.seed)), variant, name, args.seed)
         evaluate(model, name, args.seed, args.damaged)
 
 
