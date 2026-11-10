@@ -29,7 +29,15 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 from ror import data, lora
-from ror.config import CHECKPOINTS, GENERATORS, RESULTS, TEST_PER_CLASS, TRAIN_GENERATOR, TRAIN_TAG
+from ror.config import (
+    CHECKPOINTS,
+    DAMAGED_PER_CLASS,
+    GENERATORS,
+    RESULTS,
+    TEST_PER_CLASS,
+    TRAIN_GENERATOR,
+    TRAIN_TAG,
+)
 from ror.device import DEVICE, NUM_WORKERS, autocast
 from ror.experiment import run, summarize, train_val_split
 from ror.features import DEGRADED_TAG, Job, cache, feature_path, load_univfd
@@ -42,9 +50,6 @@ HEAD_LR = 1e-4  # the repo's learning rate for the head
 WARMUP_FRACTION = 0.05
 EPOCHS = 1
 VALIDATIONS_PER_EPOCH = 4
-# Damaged copies are scored on 1,000 + 1,000 images per generator (a subset of the clean 2,000 + 2,000),
-# because each adapted model has to run CLIP again on every image.
-DAMAGED_PER_CLASS = 1000
 GRADIENT_CHECKPOINTING = os.environ.get("ROR_CHECKPOINTING", "1") == "1"
 
 # variant -> (training view, validation view, starting head). Views match how B and U2 were trained and

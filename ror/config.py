@@ -17,6 +17,8 @@ OUT = _path("ROR_OUT", "/content/drive/MyDrive/aml_real_or_rendered")
 FEATURES = OUT / "features"  # test features do not depend on the training size, so they are shared
 RESULTS = OUT / f"results{TRAIN_TAG}"
 CHECKPOINTS = OUT / f"checkpoints{TRAIN_TAG}"
+# U3's native-resolution crops: several GB, so on the runtime's own disk, not Drive. Rebuilt per session.
+PATCHES = _path("ROR_PATCHES", "/content/patches")
 
 DATA = _path("ROR_DATA", "/content/data")
 UNIVFD = _path("ROR_UNIVFD", "/content/UniversalFakeDetect")
@@ -36,6 +38,9 @@ GENERATORS = [
 ]
 
 TEST_PER_CLASS = 2000
+# Models that must run their own network on every test image (U1, U3, full) are scored on damaged copies
+# of 1,000 + 1,000 images per generator, a subset of the clean sample, so comparisons stay paired.
+DAMAGED_PER_CLASS = 1000
 VAL_FRACTION = 0.1
 SEEDS = [0, 1, 2]
 SAMPLE_SEED = 0
