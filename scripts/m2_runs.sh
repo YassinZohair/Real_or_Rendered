@@ -17,3 +17,7 @@ python -m ror.patches full
 for fusion in concat gate; do for seed in 0 1 2; do python -m ror.u3 train --fusion "$fusion" --seed "$seed" --full; done; done
 
 python -m ror.u3 report
+
+# Paired statistics against B, threshold diagnostic, and the M2 figures (CPU only, a few minutes)
+python -m ror.analysis
+python -m ror.plots m2

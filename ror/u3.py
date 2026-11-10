@@ -190,18 +190,12 @@ def evaluate(model, cfg, name, seed):
 def report():
     """Every model so far, mean over the 8 generators, clean and damaged.
 
-    B and U2 were scored on all 2,000 + 2,000 damaged images, the others on the 1,000 + 1,000 subset,
+    B and B+U2 were scored on all 2,000 + 2,000 damaged images, the others on the 1,000 + 1,000 subset,
     so damaged rows compare closely but not image for image (ror.analysis does the paired version).
     """
-    keep = {"baseline.csv": ["retrained_sd14"], "u2.csv": ["u2v2"]}
-    frames = []
-    for file, models in keep.items():
-        if (RESULTS / file).exists():
-            frame = pd.read_csv(RESULTS / file)
-            frames.append(frame[frame["model"].isin(models)])
-    for pattern in ["u1_r8_seed*.csv", "u1_r8_seed*_degraded.csv", "u1u2_r8_seed*.csv", "u3_*_seed*.csv", "full_*_seed*.csv"]:
-        frames += [pd.read_csv(path) for path in sorted(RESULTS.glob(pattern))]
-    results = pd.concat(frames)
+    from ror import collect
+
+    results = collect.results(both_fusions=True)
     metrics = ["acc", "real_acc", "fake_acc", "auc"]
     per_seed = results.groupby(["protocol", "model", "seed"], sort=False)[metrics].mean()
     table = per_seed.groupby(["protocol", "model"], sort=False).agg(

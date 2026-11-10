@@ -1,4 +1,4 @@
-"""Figures for the baseline results."""
+"""Figures: baseline, U2, and the Milestone 2 comparison of every model (python -m ror.plots m2)."""
 import sys
 
 import matplotlib
@@ -59,14 +59,17 @@ plt.rcParams.update(
 )
 
 
-def accuracy_columns(series, title, path):
-    """Grouped columns of accuracy per test generator. series: {label: (color, per-seed frame)}."""
+METRIC_LABELS = {"acc": "Accuracy (%)", "auc": "ROC-AUC (%)"}
+
+
+def accuracy_columns(series, title, path, metric="acc"):
+    """Grouped columns of a metric per test generator. series: {label: (color, per-seed frame)}."""
     order = list(NAMES)
     fig, ax = plt.subplots(figsize=(11, 4.6))
     width = min(BAR_WIDTH, 0.84 / len(series) - 0.03)
     offsets = (np.arange(len(series)) - (len(series) - 1) / 2) * (width + 0.03)
     for offset, (label, (color, frame)) in zip(offsets, series.items()):
-        per_seed = frame.pivot(index="generator", columns="seed", values="acc").loc[order]
+        per_seed = frame.pivot(index="generator", columns="seed", values=metric).loc[order]
         mean, std = per_seed.mean(axis=1), per_seed.std(axis=1).fillna(0)
         x = np.arange(len(order)) + offset
         ax.bar(x, mean, width, color=color, label=label, yerr=std if std.any() else None,
@@ -78,7 +81,7 @@ def accuracy_columns(series, title, path):
     ax.set_xticks(np.arange(len(order)), [NAMES[g] for g in order])
     ax.set_ylim(0, 108)
     ax.set_yticks([0, 25, 50, 75, 100])
-    ax.set_ylabel("Accuracy (%)")
+    ax.set_ylabel(METRIC_LABELS[metric])
     ax.set_title(title, loc="left", fontsize=13, pad=34)
     ax.legend(frameon=False, loc="lower left", ncols=len(series), bbox_to_anchor=(0, 1.0), borderaxespad=0)
     fig.tight_layout()
@@ -107,21 +110,22 @@ def roc_small_multiples(probs, title, path):
     plt.close(fig)
 
 
-def robustness_curve(series, title, path):
-    """Mean accuracy over the 8 generators as test images get more damaged. series: {label: (color, frame)}."""
+def robustness_curve(series, title, path, metric="acc"):
+    """Mean of a metric over the 8 generators as test images get more damaged. series: {label: (color, frame)}."""
     protocols, labels = zip(*CONDITIONS)
     x = np.arange(len(protocols))
     fig, ax = plt.subplots(figsize=(11, 4.6))
     means = {}
     for label, (color, frame) in series.items():
-        per_seed = frame.groupby(["protocol", "seed"])["acc"].mean().unstack("seed").loc[list(protocols)]
+        per_seed = frame.groupby(["protocol", "seed"])[metric].mean().unstack("seed").loc[list(protocols)]
         mean, std = per_seed.mean(axis=1).to_numpy(), per_seed.std(axis=1).fillna(0).to_numpy()
         means[label] = mean
         ax.fill_between(x, mean - std, mean + std, color=color, alpha=0.1, linewidth=0)
         ax.plot(x, mean, color=color, linewidth=2, marker="o", markersize=8,
                 markeredgecolor=SURFACE, markeredgewidth=2, label=label)
-    # End values only: the highest line's label sits above its point, the others stack below theirs.
-    for i in (0, len(x) - 1):
+    # End values only, and only for up to 3 lines (more would collide; the legend identifies them):
+    # the highest line's label sits above its point, the others stack below theirs.
+    for i in (0, len(x) - 1) if len(series) <= 3 else ():
         ranked = sorted(means.values(), key=lambda mean: mean[i], reverse=True)
         for rank, mean in enumerate(ranked):
             offset = 9 if rank == 0 else -10 - 12 * (rank - 1)
@@ -131,9 +135,9 @@ def robustness_curve(series, title, path):
     ax.text(1.0, 50, " chance", transform=ax.get_yaxis_transform(), va="center", fontsize=9, color=MUTED)
     ax.set_xticks(x, labels)
     ax.set_ylim(40, 100)
-    ax.set_ylabel("Mean accuracy over 8 generators (%)")
+    ax.set_ylabel(f"{METRIC_LABELS[metric][:-4]}, mean over 8 generators (%)")
     ax.set_title(title, loc="left", fontsize=13, pad=34)
-    ax.legend(frameon=False, loc="lower left", ncols=len(series), bbox_to_anchor=(0, 1.0), borderaxespad=0)
+    ax.legend(frameon=False, loc="lower left", ncols=min(len(series), 4), bbox_to_anchor=(0, 1.0), borderaxespad=0)
     fig.tight_layout()
     fig.savefig(path, dpi=200)
     plt.close(fig)
@@ -197,7 +201,12 @@ def u2_figures():
 
 def main(experiment):
     FIGURES.mkdir(parents=True, exist_ok=True)
-    {"baseline": baseline_figures, "u2": u2_figures}[experiment]()
+    if experiment == "m2":
+        from ror.plots_m2 import m2_figures
+
+        m2_figures()
+    else:
+        {"baseline": baseline_figures, "u2": u2_figures}[experiment]()
     print(f"figures written to {FIGURES}")
 
 
